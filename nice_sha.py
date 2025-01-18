@@ -99,6 +99,23 @@ def build_commit(commit):
     return hashlib.sha1(full_data).hexdigest()
 
 
+def is_closer_to_key(new_sha, old_sha, key):
+    new = 0
+    old = 0
+    for i in range(min(len(key), 40)):
+        if new_sha[i] == key[i]:
+            new += 1
+        else:
+            break
+    
+    for i in range(min(len(key), 40)):
+        if old_sha[i] == key[i]:
+            old += 1
+        else:
+            break
+    return new > old
+
+
 def wait_for_enter():
     input("Press [Enter] to stop...\n")
     global stop_requested
@@ -110,6 +127,7 @@ stop_requested = False
 threading.Thread(target=wait_for_enter, daemon=True).start()
 
 
+key = sys.argv[1] + "0"*(40-len(sys.argv[1] )) if len(sys.argv) >= 2 else "0"*40
 sha = get_sha()
 result = (sha, None)
 commit = get_commit(sha)
@@ -123,7 +141,7 @@ try:
         commit = set_commit_timestamp(commit, new_timestamp)
         sha = build_commit(commit)
 
-        if int(sha, 16) < int(result[0], 16):
+        if is_closer_to_key(sha, result[0], key):
             result = (sha, new_timestamp)
 
         rate = "--" if time.monotonic() - t_start == 0 else f"{i/(time.monotonic() - t_start) / 1000:.2f}"
