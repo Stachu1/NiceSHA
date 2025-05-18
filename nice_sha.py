@@ -143,11 +143,13 @@ try:
 
         if is_closer_to_key(sha, result[0], key):
             result = (sha, new_timestamp)
-
-        rate = "--" if time.monotonic() - t_start == 0 else f"{i/(time.monotonic() - t_start) / 1000:.2f}"
-        if i % 100_000 == 0:
+            rate = "--" if time.monotonic() - t_start == 0 else f"{i/(time.monotonic() - t_start) / 1000:.2f}"
             print(f"\033[2K\r{CYAN}🔹{result[0][:8]}{RESET}{DIM} - {RESET}{YELLOW}{result[1]} {RESET}{DIM}|{RESET} {BLUE}⚡{rate} kH/s{RESET}", end="")
-        
+            
+        elif i % 100_000 == 0:
+            rate = "--" if time.monotonic() - t_start == 0 else f"{i/(time.monotonic() - t_start) / 1000:.2f}"
+            print(f"\033[2K\r{CYAN}🔹{result[0][:8]}{RESET}{DIM} - {RESET}{YELLOW}{result[1]} {RESET}{DIM}|{RESET} {BLUE}⚡{rate} kH/s{RESET}", end="")
+            
         i += 1
 
     if result[1] is not None:
