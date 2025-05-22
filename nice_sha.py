@@ -1,6 +1,13 @@
 from datetime import datetime
-import subprocess, os, time, hashlib
+import subprocess, os, sys, time, hashlib
 
+
+RESET   = '\033[0m'
+GREEN   = '\033[92m'
+CYAN    = '\033[96m'
+YELLOW  = '\033[93m'
+BLUE    = '\033[94m'
+DIM     = '\033[2m'
 
 
 def get_sha():
@@ -93,7 +100,7 @@ sha = get_sha()
 result = (sha, None)
 commit = get_commit(sha)
 timestamp = int(time.time())
-t_start = time.monotonic() - 1
+t_start = time.monotonic()
 i = 0
 try:
     while True:
@@ -105,12 +112,17 @@ try:
         if int(sha, 16) < int(result[0], 16):
             result = (sha, new_timestamp)
 
-        print(f"\033[2K\r[{i:4}] {result[0][:8]} - {result[1]} | {i/(time.monotonic() - t_start) / 1000 :.2f} kH/s", end="")
+        rate = "--" if time.monotonic() - t_start == 0 else f"{i/(time.monotonic() - t_start) / 1000:.2f}"
+        if i % 100 == 0:
+            print(f"\033[2K\r{CYAN}🔹{result[0][:8]}{RESET}{DIM} - {RESET}{YELLOW}{result[1]} {RESET}{DIM}|{RESET} {BLUE}⚡{rate} kH/s{RESET}", end="")
         
         i += 1
 except KeyboardInterrupt:
-    print("\nApplying current lowes SHA - ", end="")
-
-date = unix_to_git_format(result[1])
-set_date(date)
-print("Done!")
+    if result[1] is not None:
+        print("\nApplying current lowes SHA - ", end="")
+        date = unix_to_git_format(result[1])
+        set_date(date)
+        print("Done!")
+    else:
+        print("\nDidn't find a lower SHA", end="")
+    sys.exit(0)
