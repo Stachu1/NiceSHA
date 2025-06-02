@@ -90,7 +90,7 @@ def build_commit(commit):
 
 
 sha = get_sha()
-lowest_sha = (sha, None)
+result = (sha, None)
 commit = get_commit(sha)
 timestamp = int(time.time())
 t_start = time.monotonic() - 1
@@ -98,18 +98,19 @@ i = 0
 try:
     while True:
         
-        commit = set_commit_timestamp(commit, timestamp-i)
+        new_timestamp = timestamp - i
+        commit = set_commit_timestamp(commit, new_timestamp)
         sha = build_commit(commit)
     
-        if int("0x" + sha, 16) < int("0x" + lowest_sha[0], 16):
-            lowest_sha = (sha, timestamp-i)
-        
-        print(f"\033[2K\r[{i:4}] {lowest_sha[0][:8]} - {lowest_sha[1]} | {i/(time.monotonic() - t_start) / 1000 :.2f} kH/s", end="")
+        if int(sha, 16) < int(result[0], 16):
+            result = (sha, new_timestamp)
+
+        print(f"\033[2K\r[{i:4}] {result[0][:8]} - {result[1]} | {i/(time.monotonic() - t_start) / 1000 :.2f} kH/s", end="")
         
         i += 1
 except KeyboardInterrupt:
     print("\nApplying current lowes SHA - ", end="")
 
-date = unix_to_git_format(lowest_sha[1])
+date = unix_to_git_format(result[1])
 set_date(date)
 print("Done!")
