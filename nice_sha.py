@@ -1,4 +1,5 @@
-import subprocess, os, time
+from datetime import datetime
+import subprocess, os, time, hashlib
 
 
 
@@ -9,40 +10,106 @@ def get_sha():
 def get_msg():
     return subprocess.run(["git", "log", "-1", "--pretty=%B"], capture_output=True).stdout.decode().split("\n")[0]
 
-def set_time(timestamp="2025-01-01T00:00:00"):
+
+def get_commit(sha):
+    result = subprocess.run(
+        ['git', 'cat-file', '-p', sha],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+    if result.returncode != 0:
+        raise Exception(f"Git error: {result.stderr}")
+    
+    lines = result.stdout.splitlines()
+    parsed = {
+        'tree': None,
+        'parent': None,
+        'author': None,
+        'committer': None,
+        'message': ''
+    }
+
+    in_message = False
+    message_lines = []
+
+    for line in lines:
+        if in_message:
+            message_lines.append(line)
+            continue
+
+        if line.startswith('tree '):
+            parsed['tree'] = line.split(' ', 1)[1]
+        elif line.startswith('parent '):
+            parsed['parent'] = line.split(' ', 1)[1]
+        elif line.startswith('author '):
+            parsed['author'] = line[len('author '):]
+        elif line.startswith('committer '):
+            parsed['committer'] = line[len('committer '):]
+        elif line.strip() == '':
+            in_message = True
+        else:
+            continue
+    parsed['message'] = '\n'.join(message_lines).strip()
+    return parsed
+
+
+def set_date(date="2025-01-01T00:00:00"):
     env = os.environ.copy()
-    env["GIT_COMMITTER_DATE"] = timestamp
-    return subprocess.run(['git', 'commit', '--amend', '--no-edit', f'--date="{timestamp}"'], env=env, capture_output=True)
+    env["GIT_COMMITTER_DATE"] = date
+    return subprocess.run(['git', 'commit', '--amend', '--no-edit', f'--date="{date}"'], env=env, capture_output=True)
 
 
-def gen_timestamp(d, h, m, s):
-    return f"2025-01-{d:02}T{h:02}:{m:02}:{s:02}"
+def set_commit_timestamp(commit, timestamp):
+    author = commit['author']
+    current_ts = author.split(' ')[2]
+    commit['author'] = commit['author'].replace(current_ts, str(timestamp))
+    commit['committer'] = commit['committer'].replace(current_ts, str(timestamp))
+    return commit
 
 
+def unix_to_git_format(timestamp):
+    dt = datetime.fromtimestamp(timestamp)
+    return dt.strftime('%Y-%m-%dT%H:%M:%S')
+
+
+def build_commit(commit):
+    lines = []
+    lines.append(f'tree {commit['tree']}')
+    if commit['parent']:
+        lines.append(f'parent {commit['parent']}')
+    lines.append(f'author {commit['author']}')
+    lines.append(f'committer {commit['committer']}')
+    lines.append('')
+    lines.append(commit['message'])
+
+    content = '\n'.join(lines) + '\n'
+    header = f'commit {len(content)}\0'
+    full_data = (header + content).encode('utf-8')
+    return hashlib.sha1(full_data).hexdigest()
 
 
 sha = get_sha()
 lowest_sha = (sha, None)
-print(f'Working on {sha[:8]} "{get_msg()}"')
-if not input("continue? (y/N): ") == "y": exit(0)
-
-results = []
+commit = get_commit(sha)
+timestamp = int(time.time())
+t_start = time.monotonic() - 1
 i = 0
-t_start = time.monotonic()
-while True:
-    d = i // (3600*24)
-    h = i // 3600 - d*24
-    m = i // 60 - d*24*60 - h*60
-    s = i - d*24*3600 - h*3600 - m*60
-    timestamp = gen_timestamp(d+1, h, m, s)
-
-    set_time(timestamp)
-
-    sha = get_sha()
-    if int("0x" + sha, 16) < int("0x" + lowest_sha[0], 16):
-        lowest_sha = (sha, timestamp)
+try:
+    while True:
+        
+        commit = set_commit_timestamp(commit, timestamp-i)
+        sha = build_commit(commit)
     
-    print(f"\033[2K\r[{i:4}] {lowest_sha[0][:8]} - {lowest_sha[1]} | {i/(time.monotonic() - t_start):.2f} H/s", end="")
-    
-    i+=1
-    if i == 1000: break
+        if int("0x" + sha, 16) < int("0x" + lowest_sha[0], 16):
+            lowest_sha = (sha, timestamp-i)
+        
+        print(f"\033[2K\r[{i:4}] {lowest_sha[0][:8]} - {lowest_sha[1]} | {i/(time.monotonic() - t_start) / 1000 :.2f} kH/s", end="")
+        
+        i += 1
+except KeyboardInterrupt:
+    print("\nApplying current lowes SHA - ", end="")
+
+date = unix_to_git_format(lowest_sha[1])
+set_date(date)
+print("Done!")
